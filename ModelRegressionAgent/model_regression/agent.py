@@ -57,7 +57,7 @@ import os
 import sys
 import logging
 from collections import defaultdict, OrderedDict
-from datetime import datetime as dt, timedelta as td
+from datetime import datetime as dt, timedelta as td, timezone
 from dateutil import parser
 
 import json
@@ -75,13 +75,13 @@ import patsy
 from pandas.tseries.offsets import CustomBusinessDay
 from pandas.tseries.holiday import USFederalHolidayCalendar as calendar
 import scipy
-import pytz
 import re
+from zoneinfo import ZoneInfo
 
 
 utils.setup_logging()
 _log = logging.getLogger(__name__)
-UTC_TZ = pytz.timezone('UTC')
+UTC_TZ = timezone.utc
 WORKING_DIR = os.getcwd()
 __version__ = 0.1
 HOLIDAYS = pd.to_datetime(CustomBusinessDay(calendar=calendar()).holidays)
@@ -495,7 +495,7 @@ class RegressionAgent(Agent):
 
         self.one_shot = config.get('one_shot', False)
 
-        self.local_tz = pytz.timezone(config.get('local_tz', 'US/Pacific'))
+        self.local_tz = ZoneInfo(config.get('local_tz', 'US/Pacific'))
         # If one shot is true then start and end should be specified
         if self.one_shot:
             self.start = config.get('start')
@@ -531,10 +531,10 @@ class RegressionAgent(Agent):
         else:
             try:
                 self.start = parser.parse(self.start)
-                self.start = self.local_tz.localize(self.start)
+                self.start = self.start.replace(tzinfo=self.local_tz)
                 self.start = self.start.astimezone(UTC_TZ)
                 self.end = parser.parse(self.end)
-                self.end = self.local_tz.localize(self.end)
+                self.end = self.end.replace(tzinfo=self.local_tz)
                 self.end = self.end.astimezone(UTC_TZ)
             except (NameError, ValueError) as ex:
                 _log.debug('One shot regression:  start_time or end_time '
@@ -685,7 +685,7 @@ class RegressionAgent(Agent):
         # get data via query to historian
         # Query loop for device will continue until start > end
         # or all data for regression period is obtained.
-        while rpc_start < self.end.astimezone(pytz.UTC):
+        while rpc_start < self.end.astimezone(UTC_TZ):
             df = None
             # If exclude_weekend_holidays is True then do not query for
             # these times.  Reduces rpc calls and message bus traffic.
@@ -737,10 +737,10 @@ class RegressionAgent(Agent):
             # need to be revised to account for this or the count in historian
             # could be increased.
             rpc_start = rpc_start + td(hours=8)
-            if rpc_start + td(minutes=479) <= self.end.astimezone(pytz.UTC):
+            if rpc_start + td(minutes=479) <= self.end.astimezone(UTC_TZ):
                 rpc_end = rpc_start + td(minutes=479)  #
             else:
-                rpc_end = self.end.astimezone(pytz.UTC)
+                rpc_end = self.end.astimezone(UTC_TZ)
         return aggregated_df
 
     def localize_df(self, df, device):
